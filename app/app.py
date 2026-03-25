@@ -1,17 +1,14 @@
 import streamlit as st
 import pickle
 import pandas as pd
-import os
 
-# -----------------------------
-# Load trained model
-# -----------------------------
+
+import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 model_path = os.path.join(BASE_DIR, "models", "loan_model.pkl")
 
 model = pickle.load(open(model_path, "rb"))
-
 # -----------------------------
 # App Title
 # -----------------------------
