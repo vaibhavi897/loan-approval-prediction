@@ -7,8 +7,10 @@ import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 model_path = os.path.join(BASE_DIR, "models", "loan_model.pkl")
+scaler_path = os.path.join(BASE_DIR, "models", "scaler.pkl")
 
 model = pickle.load(open(model_path, "rb"))
+scaler = pickle.load(open(scaler_path, "rb"))
 # -----------------------------
 # App Title
 # -----------------------------
@@ -28,7 +30,10 @@ married = st.selectbox("Married", ["Yes", "No"])
 married = 1 if married == "Yes" else 0
 
 education = st.selectbox("Education", ["Graduate", "Not Graduate"])
-education = 1 if education == "Graduate" else 0
+education = 0 if education == "Graduate" else 1
+
+dependents = st.selectbox("Dependents", ["0", "1", "2", "3+"])
+dependents = 3 if dependents == "3+" else int(dependents)
 
 self_employed = st.selectbox("Self Employed", ["No", "Yes"])
 self_employed = 1 if self_employed == "Yes" else 0
@@ -42,16 +47,25 @@ elif property_area == "Semiurban":
 else:
     property_area = 0
 
-# Income inputs (restricted to realistic dataset ranges)
-applicant_income = st.number_input("Applicant Income", 1000, 25000, 5000)
-
-coapplicant_income = st.number_input("Coapplicant Income", 0, 10000, 0)
-
-loan_amount = st.number_input("Loan Amount (in thousands)", 50, 500, 150)
-
+# Income inputs (realistic ranges)
+applicant_income = st.number_input("Applicant Income", 0, 500000, 5000)
+coapplicant_income = st.number_input("Coapplicant Income", 0, 300000, 0)
+loan_amount = st.number_input("Loan Amount (in thousands)", 1, 10000, 150)
 loan_term = st.number_input("Loan Term (Months)", 12, 480, 360)
 
-interest_rate = st.number_input("Interest Rate (%)", 1.0, 20.0, 8.5)
+# Check for out-of-distribution inputs
+ood_warnings = []
+if applicant_income > 35000:
+    ood_warnings.append("Applicant Income is much higher than most training data.")
+if coapplicant_income > 10000:
+    ood_warnings.append("Coapplicant Income is much higher than most training data.")
+if loan_amount > 500 or loan_amount < 30:
+    ood_warnings.append("Loan Amount is outside the typical training data range.")
+
+if ood_warnings:
+    st.warning("⚠️ " + " ".join(ood_warnings) + " Prediction confidence may be lower than usual.")
+
+
 
 credit_history = st.selectbox("Credit History", [0, 1])
 
@@ -67,7 +81,7 @@ if st.button("Predict Loan Approval"):
     input_data = pd.DataFrame({
         "Gender":[gender],
         "Married":[married],
-        "Dependents":[0],
+        "Dependents":[dependents],
         "Education":[education],
         "Self_Employed":[self_employed],
         "ApplicantIncome":[applicant_income],
@@ -79,8 +93,10 @@ if st.button("Predict Loan Approval"):
         "TotalIncome":[total_income]
     })
 
-    prediction = model.predict(input_data)[0]
-    probability = model.predict_proba(input_data)[0][1]
+    input_data_scaled = scaler.transform(input_data)
+
+    prediction = model.predict(input_data_scaled)[0]
+    probability = model.predict_proba(input_data_scaled)[0][1]
 
     prob_percent = probability * 100
 
@@ -104,22 +120,3 @@ if st.button("Predict Loan Approval"):
 
     else:
         st.error("🔴 Risk Level: High Risk")
-
-    # -----------------------------
-    # EMI Calculator
-    # -----------------------------
-
-    P = loan_amount * 1000
-    R = interest_rate / (12 * 100)
-    N = loan_term
-
-    emi = (P * R * (1 + R)**N) / ((1 + R)**N - 1)
-
-    total_payment = emi * N
-    total_interest = total_payment - P
-
-    st.subheader("💰 Loan EMI Details")
-
-    st.write(f"Monthly EMI: ₹{emi:.2f}")
-    st.write(f"Total Payment: ₹{total_payment:.2f}")
-    st.write(f"Total Interest: ₹{total_interest:.2f}")
